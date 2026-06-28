@@ -1,4 +1,4 @@
-# SIGNAL — Tab Audio Visualizer
+# SIGNAL -> Tab Audio Visualizer
 
 A local, no-backend, no-framework audio visualizer that captures **browser tab audio**
 and renders it in real time across six visualization modes. Built with plain
