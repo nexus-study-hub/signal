@@ -1,4 +1,4 @@
-# SIGNAL -> Tab Audio Visualizer
+# SIGNAL-> Music Visualizer
 
 A local, no-backend, no-framework audio visualizer that captures **browser tab audio**
 and renders it in real time across six visualization modes. Built with plain
@@ -33,9 +33,10 @@ normally on its own.
 | 3 | **Circular Spectrum** | Radial FFT bars rotating around a bass-reactive center pulse, with a particle ring driven by treble. |
 | 4 | **Line Graph** | Scrolling, layered bass/mid/treble energy traces over a grid background. |
 | 5 | **Particle Visualizer** | Drifting particle field — bass controls particle size, treble controls velocity, mid controls color blend. |
-| 6 | **Orchestra Mode** | A seven-band meter bank (Sub Bass → Brilliance), each row showing an icon, a scrolling filled waveform, and a live dB/percent/peak meter. |
+| 6 | **Orchestra Mode 1** | Seven-band meter bank where each row's filled waveform scrolls — a continuous, seismograph-style feed of recent energy. |
+| 7 | **Orchestra Mode 2** | Same seven-band layout, but each row is sampled at fixed x-positions across its own Hz range, so the silhouette reshapes live in place instead of scrolling. |
 
-Switch modes anytime with the toolbar or number keys **1–6**.
+Switch modes anytime with the toolbar or number keys **1–7**.
 
 ---
 
@@ -54,7 +55,7 @@ intensity, background blur, wave thickness.
 |-----|--------|
 | `Space` | Pause / Resume |
 | `F` | Fullscreen |
-| `1`–`6` | Switch visualization mode |
+| `1`–`7` | Switch visualization mode |
 | `S` | Screenshot (PNG) |
 | `R` | Start / stop recording (WebM) |
 | `Esc` | Exit fullscreen |
@@ -106,7 +107,9 @@ README.md
 - `ThemeManager` — theme registry and live accent-color reads for canvas.
 - `SettingsManager` — single source of truth for tunable parameters.
 - `Visualizer` (base) + `SpectrumBars`, `WaveformViz`, `CircularVisualizer`,
-  `LineGraphViz`, `ParticleViz`, `OrchestraMode` — one class per mode.
+  `LineGraphViz`, `ParticleViz` — one class per mode. `OrchestraBase` extends
+  `Visualizer` with the icon/label/meter drawing shared by `OrchestraModeV1`
+  (scrolling history) and `OrchestraModeV2` (fixed-position, static layout).
 - `AnimationEngine` — canvas sizing, the `requestAnimationFrame` loop, FPS
   tracking, mode switching, hidden-tab pausing.
 - `UIController` — binds all of the above to the DOM, handles start/stop/pause,
