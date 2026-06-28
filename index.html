@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SIGNAL — Tab Audio Visualizer</title>
+<meta name="description" content="A local, no-backend tab-audio visualizer with spectrum, waveform, circular, particle and multi-band orchestra modes.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="phosphor">
+
+  <!-- ===================== BACKGROUND GLOW LAYER ===================== -->
+  <div class="bg-glow" id="bgGlow" aria-hidden="true"></div>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <!-- ===================== APP SHELL ===================== -->
+  <div class="app" id="app">
+
+    <!-- ---------- TOP BAR ---------- -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" id="brandMark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path d="M3 12h2l2-7 4 14 3-9 2 5h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <div class="brand-text">
+          <span class="brand-name">SIGNAL</span>
+          <span class="brand-sub">tab audio analyzer</span>
+        </div>
+      </div>
+
+      <!-- Live readouts -->
+      <div class="readouts" id="readouts" role="status" aria-live="polite">
+        <div class="readout">
+          <span class="readout-label">VOL</span>
+          <span class="readout-value" id="rVolume">— %</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">PEAK&nbsp;F</span>
+          <span class="readout-value" id="rPeakFreq">— Hz</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">FPS</span>
+          <span class="readout-value" id="rFps">—</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">LAT</span>
+          <span class="readout-value" id="rLatency">— ms</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">SR</span>
+          <span class="readout-value" id="rSampleRate">— kHz</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">BPM</span>
+          <span class="readout-value" id="rBpm">—</span>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="icon-btn" id="btnSettings" title="Settings" aria-label="Open settings">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z M19.4 13a7.4 7.4 0 000-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 00-1.7-1L14.9 3h-3.8l-.4 2.6a7.6 7.6 0 00-1.7 1l-2.4-1-2 3.4L6.6 11a7.4 7.4 0 000 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 001.7 1l.4 2.6h3.8l.4-2.6a7.6 7.6 0 001.7-1l2.4 1 2-3.4-2-1.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" id="btnThemeMode" title="Toggle light/dark" aria-label="Toggle light or dark mode">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 4V2M12 22v-2M4 12H2M22 12h-2M5 5l-1.4-1.4M19 19l-1.4-1.4M19 5l1.4-1.4M5 19l-1.4 1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+        </button>
+        <button class="icon-btn" id="btnFullscreen" title="Fullscreen (F)" aria-label="Toggle fullscreen">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ---------- MAIN STAGE ---------- -->
+    <main class="stage" id="stage">
+      <canvas id="vizCanvas" aria-label="Audio visualization canvas"></canvas>
+
+      <!-- Idle / start overlay -->
+      <div class="start-overlay" id="startOverlay">
+        <div class="start-card">
+          <div class="start-card-glyph">
+            <svg viewBox="0 0 24 24" width="34" height="34"><path d="M3 12h2l2-7 4 14 3-9 2 5h5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h1>No signal</h1>
+          <p>Share a browser tab with <strong>“Share tab audio”</strong> enabled. Everything runs locally — no audio ever leaves this device.</p>
+          <button class="btn-primary" id="btnStart">
+            <svg viewBox="0 0 24 24" width="16" height="16"><path d="M6 4l14 8-14 8V4z" fill="currentColor"/></svg>
+            Start capture
+          </button>
+          <p class="start-hint" id="startError" role="alert"></p>
+        </div>
+      </div>
+
+      <!-- Beat flash overlay -->
+      <div class="beat-flash" id="beatFlash" aria-hidden="true"></div>
+
+      <!-- Mode label chip -->
+      <div class="mode-chip" id="modeChip">Spectrum Bars</div>
+    </main>
+
+    <!-- ---------- BOTTOM TOOLBAR ---------- -->
+    <footer class="toolbar" id="toolbar">
+      <div class="toolbar-group transport">
+        <button class="tbtn tbtn-accent" id="btnPlayPause" title="Pause / Resume (Space)" disabled>
+          <svg viewBox="0 0 24 24" width="16" height="16" id="iconPlayPause"><path d="M6 4l14 8-14 8V4z" fill="currentColor"/></svg>
+        </button>
+        <button class="tbtn" id="btnStop" title="Stop" disabled>
+          <svg viewBox="0 0 24 24" width="16" height="16"><rect x="5" y="5" width="14" height="14" rx="1.5" fill="currentColor"/></svg>
+        </button>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <div class="toolbar-group viz-select" id="vizSelect">
+        <!-- populated by JS: 7 mode buttons, numbered 1-7 -->
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <div class="toolbar-group sliders">
+        <label class="tslider" title="Input sensitivity">
+          <span>SENS</span>
+          <input type="range" id="sliderSensitivity" min="0.2" max="3" step="0.01" value="1">
+        </label>
+        <label class="tslider" title="Input gain">
+          <span>GAIN</span>
+          <input type="range" id="sliderGain" min="0" max="4" step="0.01" value="1">
+        </label>
+        <label class="tslider" title="Analyser smoothing">
+          <span>SMOOTH</span>
+          <input type="range" id="sliderSmoothing" min="0" max="0.97" step="0.01" value="0.78">
+        </label>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <div class="toolbar-group theme-select">
+        <select id="themeSelect" title="Color theme" aria-label="Color theme"></select>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <div class="toolbar-group capture-actions">
+        <button class="icon-btn" id="btnScreenshot" title="Screenshot (S)" aria-label="Take screenshot">
+          <svg viewBox="0 0 24 24" width="17" height="17"><path d="M4 8h2.5l1.2-2h8.6l1.2 2H20a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+        </button>
+        <button class="icon-btn" id="btnRecord" title="Record (R)" aria-label="Record visualization">
+          <svg viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="3.4" fill="currentColor" id="recDot"/></svg>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ===================== SETTINGS PANEL ===================== -->
+  <aside class="settings-panel" id="settingsPanel" aria-label="Settings panel">
+    <div class="settings-header">
+      <h2>Settings</h2>
+      <button class="icon-btn" id="btnCloseSettings" aria-label="Close settings">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <div class="settings-body">
+
+      <section class="settings-section">
+        <h3>Analysis</h3>
+        <label class="field">
+          <span class="field-label">FFT size <em id="vFftSize">2048</em></span>
+          <select id="selFftSize">
+            <option value="512">512</option>
+            <option value="1024">1024</option>
+            <option value="2048" selected>2048</option>
+            <option value="4096">4096</option>
+            <option value="8192">8192</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Bar count <em id="vBarCount">64</em></span>
+          <input type="range" id="rngBarCount" min="16" max="256" step="1" value="64">
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h3>Spectrum bars</h3>
+        <label class="field">
+          <span class="field-label">Peak hold time (ms) <em id="vPeakHold">900</em></span>
+          <input type="range" id="rngPeakHold" min="100" max="2500" step="50" value="900">
+        </label>
+        <label class="field checkbox">
+          <input type="checkbox" id="chkMirror">
+          <span>Mirror mode</span>
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h3>Waveform</h3>
+        <label class="field">
+          <span class="field-label">Line width <em id="vLineWidth">2.5</em></span>
+          <input type="range" id="rngLineWidth" min="0.5" max="8" step="0.1" value="2.5">
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h3>Circular spectrum</h3>
+        <label class="field">
+          <span class="field-label">Radius <em id="vRadius">100</em></span>
+          <input type="range" id="rngRadius" min="40" max="220" step="1" value="100">
+        </label>
+        <label class="field">
+          <span class="field-label">Rotation speed <em id="vRotSpeed">0.20</em></span>
+          <input type="range" id="rngRotSpeed" min="0" max="2" step="0.01" value="0.20">
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h3>Particles</h3>
+        <label class="field">
+          <span class="field-label">Particle count <em id="vParticleCount">600</em></span>
+          <input type="range" id="rngParticleCount" min="50" max="3000" step="10" value="600">
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h3>Visual style</h3>
+        <label class="field">
+          <span class="field-label">Glow intensity <em id="vGlow">14</em></span>
+          <input type="range" id="rngGlow" min="0" max="40" step="1" value="14">
+        </label>
+        <label class="field">
+          <span class="field-label">Background blur <em id="vBgBlur">18</em></span>
+          <input type="range" id="rngBgBlur" min="0" max="60" step="1" value="18">
+        </label>
+        <label class="field">
+          <span class="field-label">Wave thickness <em id="vWaveThick">2</em></span>
+          <input type="range" id="rngWaveThick" min="0.5" max="6" step="0.1" value="2">
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h3>Keyboard shortcuts</h3>
+        <ul class="shortcut-list">
+          <li><kbd>Space</kbd><span>Pause / Resume</span></li>
+          <li><kbd>F</kbd><span>Fullscreen</span></li>
+          <li><kbd>1</kbd>–<kbd>7</kbd><span>Visualization mode</span></li>
+          <li><kbd>S</kbd><span>Screenshot</span></li>
+          <li><kbd>R</kbd><span>Start / stop recording</span></li>
+          <li><kbd>Esc</kbd><span>Exit fullscreen</span></li>
+        </ul>
+      </section>
+
+    </div>
+  </aside>
+  <div class="settings-scrim" id="settingsScrim"></div>
+
+  <!-- Off-screen canvas for screenshot flash -->
+  <a id="downloadLink" style="display:none"></a>
+
+  <script src="script.js"></script>
+</body>
+</html>
