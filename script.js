@@ -613,7 +613,8 @@ class SpectrumBars extends Visualizer {
 }
 
 /* ---------------- MODE 2: WAVEFORM (Oscilloscope) ---------------- */
-class WaveformViz extends Visualizer {
+/* ---------------- MODE 2a: WAVEFORM MODE 1 (raw oscilloscope, original) ---------------- */
+class WaveformViz1 extends Visualizer {
   draw(audio) {
     const ctx = this.ctx;
     const { width, height } = this;
@@ -665,6 +666,90 @@ class WaveformViz extends Visualizer {
     ctx.moveTo(0, midY);
     ctx.lineTo(width, midY);
     ctx.stroke();
+  }
+}
+
+/* ---------------- MODE 2b: WAVEFORM MODE 2 (temporally smoothed, settled) ---------------- */
+class WaveformViz2 extends Visualizer {
+  constructor(ctx, settings, theme) {
+    super(ctx, settings, theme);
+    // Fixed-position sample points across the width (same idea as Orchestra
+    // Mode 2): each point's x-position never moves, only its height eases
+    // toward the live sample each frame, so the trace settles instead of
+    // jittering raw sample-to-sample.
+    this.pointCount = 160;
+    this.samples = new Float32Array(this.pointCount);
+    this._initialized = false;
+  }
+
+  draw(audio) {
+    const ctx = this.ctx;
+    const { width, height } = this;
+    const time = audio.timeData;
+    const n = time.length;
+    const lineWidth = this.settings.get('lineWidth');
+    const colors = this.theme.getAccentColors();
+
+    ctx.clearRect(0, 0, width, height);
+
+    const midY = height / 2;
+    const ampScale = (height / 2 - 8) * audio.sensitivity;
+    const pointCount = this.pointCount;
+
+    // Resample the raw time-domain buffer down to a fixed point count, then
+    // ease each fixed point toward its new target instead of redrawing the
+    // raw signal directly — this is what removes the frame-to-frame jitter.
+    for (let p = 0; p < pointCount; p++) {
+      const srcIndex = Math.min(n - 1, Math.floor((p / (pointCount - 1)) * (n - 1)));
+      const raw = (time[srcIndex] - 128) / 128;
+      const prev = this.samples[p];
+      const smoothFactor = this._initialized ? 0.22 : 1; // snap on first frame, ease after
+      this.samples[p] = prev + (raw - prev) * smoothFactor;
+    }
+    this._initialized = true;
+
+    const step = width / (pointCount - 1);
+
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const grad = ctx.createLinearGradient(0, 0, width, 0);
+    grad.addColorStop(0, `rgba(${colors.accent3.r},${colors.accent3.g},${colors.accent3.b},0.95)`);
+    grad.addColorStop(0.5, `rgba(${colors.accent.r},${colors.accent.g},${colors.accent.b},0.95)`);
+    grad.addColorStop(1, `rgba(${colors.accent3.r},${colors.accent3.g},${colors.accent3.b},0.95)`);
+    ctx.strokeStyle = grad;
+    this.applyGlow(`rgba(${colors.accent.r},${colors.accent.g},${colors.accent.b},0.8)`);
+
+    ctx.beginPath();
+    let prevX = 0, prevY = midY;
+    for (let p = 0; p < pointCount; p++) {
+      const x = p * step;
+      const y = midY + this.samples[p] * ampScale;
+      if (p === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        const cx = (prevX + x) / 2;
+        const cy = (prevY + y) / 2;
+        ctx.quadraticCurveTo(prevX, prevY, cx, cy);
+      }
+      prevX = x; prevY = y;
+    }
+    ctx.lineTo(width, prevY);
+    ctx.stroke();
+    this.clearGlow();
+
+    // Faint center line for instrument-panel feel
+    ctx.strokeStyle = `rgba(${colors.accent.r},${colors.accent.g},${colors.accent.b},0.12)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, midY);
+    ctx.lineTo(width, midY);
+    ctx.stroke();
+  }
+
+  reset() {
+    this.samples.fill(0);
+    this._initialized = false;
   }
 }
 
@@ -785,11 +870,22 @@ class CircularVisualizer extends Visualizer {
 }
 
 /* ---------------- MODE 4: LINE GRAPH (scrolling frequency history) ---------------- */
-class LineGraphViz extends Visualizer {
+/* ---------------- MODE: LINE GRAPH 1 (scrolling history, original) ---------------- */
+/* ---------------- MODE: LINE GRAPH 1 (real-time, anchored — no scroll/delay) ---------------- */
+/* ---------------- MODE: LINE GRAPH 1 (sweep style, wraps left→right) ---------------- */
+/* ---------------- MODE: LINE GRAPH 1 (sweep style, 3 stacked rows) ---------------- */
+class LineGraphV1 extends Visualizer {
   constructor(ctx, settings, theme) {
     super(ctx, settings, theme);
-    this.history = [[], [], []]; // bass, mid, treble scrolling traces
     this.maxPoints = 220;
+    // Fixed-position circular buffers — sweep cursor writes into them and
+    // wraps, instead of the whole trace scrolling sideways.
+    this.buffers = [
+      new Float32Array(this.maxPoints), // bass
+      new Float32Array(this.maxPoints), // mid
+      new Float32Array(this.maxPoints), // treble
+    ];
+    this.writeIndex = 0;
   }
 
   draw(audio) {
@@ -799,58 +895,247 @@ class LineGraphViz extends Visualizer {
 
     ctx.clearRect(0, 0, width, height);
 
-    // Grid background
-    ctx.strokeStyle = `rgba(${colors.accent.r},${colors.accent.g},${colors.accent.b},0.06)`;
-    ctx.lineWidth = 1;
-    const rows = 6;
-    for (let i = 0; i <= rows; i++) {
-      const y = (height / rows) * i;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
-    }
-    const cols = 12;
-    for (let i = 0; i <= cols; i++) {
-      const x = (width / cols) * i;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
-    }
+    const n = this.maxPoints;
+    const step = width / (n - 1);
+    const fadeSpan = Math.max(8, Math.round(n * 0.12));
 
-    // Push latest values
-    this.history[0].push(audio.metrics.bass);
-    this.history[1].push(audio.metrics.mid);
-    this.history[2].push(audio.metrics.treble);
-    for (const arr of this.history) if (arr.length > this.maxPoints) arr.shift();
+    // Write the latest sample at the sweep cursor position (shared cursor
+    // across all three rows so they stay in sync)
+    this.buffers[0][this.writeIndex] = audio.metrics.bass;
+    this.buffers[1][this.writeIndex] = audio.metrics.mid;
+    this.buffers[2][this.writeIndex] = audio.metrics.treble;
 
     const traceColors = [colors.accent, colors.accent3, colors.accent2];
     const labels = ['BASS', 'MID', 'TREBLE'];
 
-    this.history.forEach((arr, idx) => {
-      if (arr.length < 2) return;
+    const rowCount = 3;
+    const rowGap = 8;
+    const weights = [1.7, 1, 1]; // [bass, mid, treble]
+    const totalWeight = weights[0] + weights[1] + weights[2];
+    const availableHeight = height - rowGap * (rowCount - 1);
+    const rowHeights = weights.map(w => (w / totalWeight) * availableHeight);
+
+    let cursorY = 0;
+    const rowYs = rowHeights.map(h => {
+      const y = cursorY;
+      cursorY += h + rowGap;
+      return y;
+    });
+
+    this.buffers.forEach((buf, idx) => {
       const c = traceColors[idx];
-      ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},0.85)`;
+      const rowY = rowYs[idx];
+      const rowHeight = rowHeights[idx];
+      const baseY = rowY + rowHeight - 8;
+      const topY = rowY + 8;
+      const ampRange = baseY - topY;
+
+      // Row background card
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.04)`;
+      ctx.fillRect(0, rowY, width, rowHeight);
+
+      // Per-row grid
+      ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},0.08)`;
+      ctx.lineWidth = 1;
+      const gridLines = 4;
+      for (let g = 0; g <= gridLines; g++) {
+        const y = topY + (ampRange / gridLines) * g;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+      }
+      const cols = 12;
+      for (let g = 0; g <= cols; g++) {
+        const x = (width / cols) * g;
+        ctx.beginPath(); ctx.moveTo(x, rowY); ctx.lineTo(x, rowY + rowHeight); ctx.stroke();
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, rowY, width, rowHeight);
+      ctx.clip();
+
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      this.applyGlow(`rgba(${c.r},${c.g},${c.b},0.6)`, 0.5);
+
+      for (let i = 1; i < n; i++) {
+        const prevIdx = i - 1;
+        const age = (this.writeIndex - i + n) % n;
+        const alpha = age < fadeSpan
+          ? 0.15 + 0.85 * (1 - age / fadeSpan)   // bright trail right behind the cursor
+          : 0.18;                                 // dim leftover from the previous sweep
+
+        const x0 = prevIdx * step, x1 = i * step;
+        const y0 = baseY - buf[prevIdx] * ampRange;
+        const y1 = baseY - buf[i] * ampRange;
+
+        ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+      }
+      this.clearGlow();
+
+      // Sweep cursor dot
+      const cx = this.writeIndex * step;
+      const cy = baseY - buf[this.writeIndex] * ampRange;
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},1)`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+      // Row label + live readout
+      ctx.font = '600 11px "JetBrains Mono", monospace';
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.9)`;
+      ctx.fillText(labels[idx], 10, rowY + 16);
+
+      const current = buf[this.writeIndex];
+      ctx.font = '500 10px "JetBrains Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.7)`;
+      ctx.fillText(`${Math.round(current * 100)}%`, width - 10, rowY + 16);
+      ctx.textAlign = 'left';
+    });
+
+    // Advance the shared cursor; wraps to 0 at the right edge of every row
+    this.writeIndex = (this.writeIndex + 1) % n;
+  }
+
+  reset() {
+    for (const buf of this.buffers) buf.fill(0);
+    this.writeIndex = 0;
+  }
+}
+
+/* ---------------- MODE: LINE GRAPH 2 (static, anchored in place) ---------------- */
+class LineGraphV2 extends Visualizer {
+  constructor(ctx, settings, theme) {
+    super(ctx, settings, theme);
+    // Fixed-position sample points (NOT a scrolling history). Each point
+    // samples a fixed sub-slice of the full audible spectrum, so the three
+    // traces reshape live in place instead of crawling sideways.
+    this.pointsPerTrace = 48;
+    this.traceSamples = [
+      new Float32Array(this.pointsPerTrace), // bass
+      new Float32Array(this.pointsPerTrace), // mid
+      new Float32Array(this.pointsPerTrace), // treble
+    ];
+    // Each trace samples its own Hz range, split into pointsPerTrace slices.
+    this.ranges = [
+      { lo: 20, hi: 250 },     // bass
+      { lo: 250, hi: 4000 },   // mid
+      { lo: 4000, hi: 16000 }, // treble
+    ];
+  }
+
+  draw(audio) {
+    const ctx = this.ctx;
+    const { width, height } = this;
+    const colors = this.theme.getAccentColors();
+
+    ctx.clearRect(0, 0, width, height);
+
+    const traceColors = [colors.accent, colors.accent3, colors.accent2];
+    const labels = ['BASS', 'MID', 'TREBLE'];
+    const n = this.pointsPerTrace;
+
+    const rowCount = 3;
+    const rowGap = 8;
+    const rowHeight = (height - rowGap * (rowCount - 1)) / rowCount;
+    const step = width / (n - 1);
+
+    this.traceSamples.forEach((samples, idx) => {
+      const range = this.ranges[idx];
+      const span = range.hi - range.lo;
+      const rowY = idx * (rowHeight + rowGap);
+      const baseY = rowY + rowHeight - 8;
+      const topY = rowY + 8;
+      const c = traceColors[idx];
+
+      // Row background card
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.04)`;
+      ctx.fillRect(0, rowY, width, rowHeight);
+
+      // Per-row grid (own baseline, independent of the other two panels)
+      ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},0.08)`;
+      ctx.lineWidth = 1;
+      const gridLines = 4;
+      for (let g = 0; g <= gridLines; g++) {
+        const y = topY + ((baseY - topY) / gridLines) * g;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+      }
+      const cols = 12;
+      for (let g = 0; g <= cols; g++) {
+        const x = (width / cols) * g;
+        ctx.beginPath(); ctx.moveTo(x, rowY); ctx.lineTo(x, rowY + rowHeight); ctx.stroke();
+      }
+
+      // Sample n fixed points across this trace's own Hz range — only the
+      // height at each fixed x updates frame to frame, never the x itself.
+      for (let p = 0; p < n; p++) {
+        const loP = range.lo + (p / n) * span;
+        const hiP = range.lo + ((p + 1) / n) * span;
+        const raw = audio.getBandEnergy(loP, hiP) / 255 * audio.sensitivity;
+        const prev = samples[p];
+        samples[p] = prev + (raw - prev) * (raw > prev ? 0.5 : 0.15);
+      }
+
+      // Filled area under the trace, scoped to this row only
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, rowY, width, rowHeight);
+      ctx.clip();
+
+      ctx.beginPath();
+      ctx.moveTo(0, baseY);
+      for (let p = 0; p < n; p++) {
+        const x = p * step;
+        const y = baseY - samples[p] * (baseY - topY);
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo((n - 1) * step, baseY);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, topY, 0, baseY);
+      grad.addColorStop(0, `rgba(${c.r},${c.g},${c.b},0.30)`);
+      grad.addColorStop(1, `rgba(${c.r},${c.g},${c.b},0.02)`);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Trace line itself
+      ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},0.9)`;
       ctx.lineWidth = 2;
       ctx.lineJoin = 'round';
       this.applyGlow(`rgba(${c.r},${c.g},${c.b},0.6)`, 0.5);
       ctx.beginPath();
-      const step = width / (this.maxPoints - 1);
-      const startX = width - (arr.length - 1) * step;
-      for (let i = 0; i < arr.length; i++) {
-        const x = startX + i * step;
-        const y = height - 10 - arr[i] * (height - 30);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      for (let p = 0; p < n; p++) {
+        const x = p * step;
+        const y = baseY - samples[p] * (baseY - topY);
+        if (p === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
       ctx.stroke();
       this.clearGlow();
-    });
+      ctx.restore();
 
-    // Legend
-    ctx.font = '500 11px "JetBrains Mono", monospace';
-    labels.forEach((label, idx) => {
-      const c = traceColors[idx];
+      // Row label + live readout
+      ctx.font = '600 11px "JetBrains Mono", monospace';
       ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.9)`;
-      ctx.fillText(label, 12 + idx * 70, 18);
+      ctx.fillText(labels[idx], 10, rowY + 16);
+
+      const current = samples[n - 1];
+      ctx.font = '500 10px "JetBrains Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.7)`;
+      ctx.fillText(`${Math.round(current * 100)}%`, width - 10, rowY + 16);
+      ctx.textAlign = 'left';
     });
   }
 
-  reset() { this.history = [[], [], []]; }
+  reset() {
+    for (const arr of this.traceSamples) arr.fill(0);
+  }
 }
 
 /* ---------------- MODE 5: PARTICLE VISUALIZER ---------------- */
@@ -1269,14 +1554,16 @@ class AnimationEngine {
 
     this.modes = {
       spectrum: new SpectrumBars(this.ctx, settings, theme),
-      waveform: new WaveformViz(this.ctx, settings, theme),
+      waveform1: new WaveformViz1(this.ctx, settings, theme),
+      waveform2: new WaveformViz2(this.ctx, settings, theme),
       circular: new CircularVisualizer(this.ctx, settings, theme),
-      linegraph: new LineGraphViz(this.ctx, settings, theme),
+      linegraph1: new LineGraphV1(this.ctx, settings, theme),
+      linegraph2: new LineGraphV2(this.ctx, settings, theme),
       particles: new ParticleViz(this.ctx, settings, theme),
       orchestra1: new OrchestraModeV1(this.ctx, settings, theme),
       orchestra2: new OrchestraModeV2(this.ctx, settings, theme),
     };
-    this.modeOrder = ['spectrum', 'waveform', 'circular', 'linegraph', 'particles', 'orchestra1', 'orchestra2'];
+    this.modeOrder = ['spectrum', 'waveform1', 'waveform2', 'circular', 'linegraph1', 'linegraph2', 'particles', 'orchestra1', 'orchestra2'];
     this.currentModeKey = 'spectrum';
 
     this.running = false;
@@ -1406,9 +1693,11 @@ class UIController {
 
     this.modeLabels = {
       spectrum: 'Spectrum Bars',
-      waveform: 'Waveform',
+      waveform1: 'Waveform Mode 1',
+      waveform2: 'Waveform Mode 2',
       circular: 'Circular Spectrum',
-      linegraph: 'Line Graph',
+      linegraph1: 'Line Graph Mode 1',
+      linegraph2: 'Line Graph Mode 2',
       particles: 'Particle Visualizer',
       orchestra1: 'Orchestra Mode 1',
       orchestra2: 'Orchestra Mode 2',
@@ -1810,12 +2099,14 @@ class UIController {
           this._toggleRecording();
           break;
         case '1': this._setMode('spectrum'); break;
-        case '2': this._setMode('waveform'); break;
-        case '3': this._setMode('circular'); break;
-        case '4': this._setMode('linegraph'); break;
-        case '5': this._setMode('particles'); break;
-        case '6': this._setMode('orchestra1'); break;
-        case '7': this._setMode('orchestra2'); break;
+        case '2': this._setMode('waveform1'); break;
+        case '3': this._setMode('waveform2'); break;
+        case '4': this._setMode('circular'); break;
+        case '5': this._setMode('linegraph1'); break;
+        case '6': this._setMode('linegraph2'); break;
+        case '7': this._setMode('particles'); break;
+        case '8': this._setMode('orchestra1'); break;
+        case '9': this._setMode('orchestra2'); break;
         default: break;
       }
     });
