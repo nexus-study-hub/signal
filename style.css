@@ -359,8 +359,8 @@ button, select, input{ font-family: inherit; }
    ============================================================ */
 .toolbar{
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   padding: 9px 14px;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -369,16 +369,34 @@ button, select, input{ font-family: inherit; }
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 24px rgba(0,0,0,0.28);
   flex-shrink: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.toolbar::-webkit-scrollbar{ display: none; }
+
+.toolbar-row{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0; /* allow flex children to shrink below content size */
+}
+
+/* Main row: transport, mode selector, theme, capture — must always stay
+   reachable. Only the mode selector (the part with unpredictable width as
+   modes get added) is allowed to scroll internally; everything else in
+   this row is pinned and never pushed off-screen. */
+.toolbar-row-main{ overflow: visible; }
+
+/* Slider row sits underneath and can wrap on narrow viewports without
+   ever competing with the main row for space. */
+.toolbar-row-sliders{ flex-wrap: wrap; }
 
 .toolbar-divider{
   width: 1px; height: 26px;
   background: var(--border);
   flex-shrink: 0;
 }
+
+/* Pushes capture-actions/theme-select to the row's far edge while still
+   letting viz-select claim only the space it's given, never spilling over. */
+.toolbar-divider-flexpush{ margin-left: auto; }
 
 .toolbar-group{ display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
@@ -403,13 +421,21 @@ button, select, input{ font-family: inherit; }
   box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
+/* The mode selector is the one element in the main row allowed to shrink
+   and scroll internally — it owns whatever space is left after the fixed-
+   width transport/theme/capture controls take theirs. */
 .viz-select{
   display: flex; gap: 4px;
   padding: 3px;
   background: color-mix(in srgb, var(--bg-1) 60%, transparent);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
+  flex-shrink: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.viz-select::-webkit-scrollbar{ display: none; }
 .viz-btn{
   display: flex; align-items: center; gap: 6px;
   padding: 7px 11px;
@@ -421,6 +447,7 @@ button, select, input{ font-family: inherit; }
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.15s ease;
 }
 .viz-btn .num{
@@ -575,8 +602,7 @@ select:focus, input:focus, button:focus{ outline: 2px solid color-mix(in srgb, v
   .brand-sub{ display: none; }
   .readouts{ display: none; }
   .topbar{ padding: 8px 10px; }
-  .toolbar{ flex-wrap: nowrap; }
-  .sliders{ display: none; }
+  .toolbar-row-sliders{ display: none; }
   .settings-panel{ top: 0; right: 0; bottom: 0; border-radius: 0; width: 100vw; }
 }
 
