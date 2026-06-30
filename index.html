@@ -3,13 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title> Music Visualizer</title>
+<title>Resonix - Real-Time Audio Visualizer</title>
+
+<meta name="description" content="A privacy-first, real-time browser audio visualizer featuring spectrum, waveform, circular, particle, orchestra, and immersive visualization modes. Everything runs locally.">
 <meta name="description" content="A local, no-backend tab-audio visualizer with spectrum, waveform, circular, particle and multi-band orchestra modes.">
+
+<!-- Favicon: same waveform glyph as the in-app brand mark, inlined as an SVG
+     data URI so no separate asset file is needed. Phosphor-green on a dark
+     rounded square to match the default theme. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%2307090a'/%3E%3Cpath d='M3 12h2l2-7 4 14 3-9 2 5h5' fill='none' stroke='%235dffb0' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+
 <link rel="stylesheet" href="style.css">
 </head>
 <body data-theme="phosphor">
 
   <!-- ===================== BACKGROUND GLOW LAYER ===================== -->
+
   <div class="bg-glow" id="bgGlow" aria-hidden="true"></div>
   <div class="bg-grid" aria-hidden="true"></div>
 
@@ -25,8 +34,8 @@
           </svg>
         </span>
         <div class="brand-text">
-          <span class="brand-name">SIGNAL</span>
-          <span class="brand-sub">Music Visualizer</span>
+        <span class="brand-name">RESONIX</span>
+<span class="brand-sub">real-time audio visualizer</span>
         </div>
       </div>
 
@@ -100,56 +109,59 @@
 
     <!-- ---------- BOTTOM TOOLBAR ---------- -->
     <footer class="toolbar" id="toolbar">
-      <div class="toolbar-group transport">
-        <button class="tbtn tbtn-accent" id="btnPlayPause" title="Pause / Resume (Space)" disabled>
-          <svg viewBox="0 0 24 24" width="16" height="16" id="iconPlayPause"><path d="M6 4l14 8-14 8V4z" fill="currentColor"/></svg>
-        </button>
-        <button class="tbtn" id="btnStop" title="Stop" disabled>
-          <svg viewBox="0 0 24 24" width="16" height="16"><rect x="5" y="5" width="14" height="14" rx="1.5" fill="currentColor"/></svg>
-        </button>
+      <div class="toolbar-row toolbar-row-main">
+        <div class="toolbar-group transport">
+          <button class="tbtn tbtn-accent" id="btnPlayPause" title="Pause / Resume (Space)" disabled>
+            <svg viewBox="0 0 24 24" width="16" height="16" id="iconPlayPause"><path d="M6 4l14 8-14 8V4z" fill="currentColor"/></svg>
+          </button>
+          <button class="tbtn" id="btnStop" title="Stop" disabled>
+            <svg viewBox="0 0 24 24" width="16" height="16"><rect x="5" y="5" width="14" height="14" rx="1.5" fill="currentColor"/></svg>
+          </button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <div class="toolbar-group viz-select" id="vizSelect">
+          <!-- populated by JS: 9 mode buttons, numbered 1-9 -->
+        </div>
+
+        <div class="toolbar-divider toolbar-divider-flexpush"></div>
+
+        <div class="toolbar-group theme-select">
+          <select id="themeSelect" title="Color theme" aria-label="Color theme"></select>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <div class="toolbar-group capture-actions">
+          <button class="icon-btn" id="btnScreenshot" title="Screenshot (S)" aria-label="Take screenshot">
+            <svg viewBox="0 0 24 24" width="17" height="17"><path d="M4 8h2.5l1.2-2h8.6l1.2 2H20a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+          </button>
+          <button class="icon-btn" id="btnRecord" title="Record (R)" aria-label="Record visualization">
+            <svg viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="3.4" fill="currentColor" id="recDot"/></svg>
+          </button>
+        </div>
       </div>
 
-      <div class="toolbar-divider"></div>
-
-      <div class="toolbar-group viz-select" id="vizSelect">
-        <!-- populated by JS: 7 mode buttons, numbered 1-7 -->
-      </div>
-
-      <div class="toolbar-divider"></div>
-
-      <div class="toolbar-group sliders">
-        <label class="tslider" title="Input sensitivity">
-          <span>SENS</span>
-          <input type="range" id="sliderSensitivity" min="0.2" max="3" step="0.01" value="1">
-        </label>
-        <label class="tslider" title="Input gain">
-          <span>GAIN</span>
-          <input type="range" id="sliderGain" min="0" max="4" step="0.01" value="1">
-        </label>
-        <label class="tslider" title="Analyser smoothing">
-          <span>SMOOTH</span>
-          <input type="range" id="sliderSmoothing" min="0" max="0.97" step="0.01" value="0.78">
-        </label>
-      </div>
-
-      <div class="toolbar-divider"></div>
-
-      <div class="toolbar-group theme-select">
-        <select id="themeSelect" title="Color theme" aria-label="Color theme"></select>
-      </div>
-
-      <div class="toolbar-divider"></div>
-
-      <div class="toolbar-group capture-actions">
-        <button class="icon-btn" id="btnScreenshot" title="Screenshot (S)" aria-label="Take screenshot">
-          <svg viewBox="0 0 24 24" width="17" height="17"><path d="M4 8h2.5l1.2-2h8.6l1.2 2H20a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
-        </button>
-        <button class="icon-btn" id="btnRecord" title="Record (R)" aria-label="Record visualization">
-          <svg viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="3.4" fill="currentColor" id="recDot"/></svg>
-        </button>
+      <div class="toolbar-row toolbar-row-sliders">
+        <div class="toolbar-group sliders">
+          <label class="tslider" title="Input sensitivity">
+            <span>SENS</span>
+            <input type="range" id="sliderSensitivity" min="0.2" max="3" step="0.01" value="1">
+          </label>
+          <label class="tslider" title="Input gain">
+            <span>GAIN</span>
+            <input type="range" id="sliderGain" min="0" max="4" step="0.01" value="1">
+          </label>
+          <label class="tslider" title="Analyser smoothing">
+            <span>SMOOTH</span>
+            <input type="range" id="sliderSmoothing" min="0" max="0.97" step="0.01" value="0.78">
+          </label>
+        </div>
       </div>
     </footer>
   </div>
+
 
   <!-- ===================== SETTINGS PANEL ===================== -->
   <aside class="settings-panel" id="settingsPanel" aria-label="Settings panel">
@@ -241,7 +253,7 @@
         <ul class="shortcut-list">
           <li><kbd>Space</kbd><span>Pause / Resume</span></li>
           <li><kbd>F</kbd><span>Fullscreen</span></li>
-          <li><kbd>1</kbd>–<kbd>7</kbd><span>Visualization mode</span></li>
+          <li><kbd>1</kbd>–<kbd>8</kbd><span>Visualization mode</span></li>
           <li><kbd>S</kbd><span>Screenshot</span></li>
           <li><kbd>R</kbd><span>Start / stop recording</span></li>
           <li><kbd>Esc</kbd><span>Exit fullscreen</span></li>
